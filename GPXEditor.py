@@ -122,17 +122,17 @@ def main():
             for point in segment.points:
                 if args.remove_before != None and point.time < args.remove_before:
                     segment.remove_point(0) # it's always zero, because we're removing from the beginning
-                    current_point_index = current_point_index - 1
-
-                if len(adjustments) > 0:
-                    for this_adjustment in adjustments:
-                        adjustment_delta = this_adjustment.end - this_adjustment.start
-                        if point.time > this_adjustment.start and point.time < this_adjustment.end:
-                            print("Removing point at time ", point.time)
-                            segment.remove_point(current_point_index)
-                            current_point_index = current_point_index -1
-                        if point.time >= this_adjustment.end:
-                            point.adjust_time(-adjustment_delta)
+                    current_point_index = current_point_index - 1 # now this number is negative, but will be incremented before being used again
+                else: # if an adjustment occurs before args.remove_point, we will (rightly) ignore it. But why would someone do that? Maybe I should write a bug just to punish them
+                    if len(adjustments) > 0:
+                        for this_adjustment in adjustments:
+                            adjustment_delta = this_adjustment.end - this_adjustment.start
+                            if point.time > this_adjustment.start and point.time < this_adjustment.end:
+                                print("Removing point at time ", point.time)
+                                segment.remove_point(current_point_index)
+                                current_point_index = current_point_index -1
+                            if point.time >= this_adjustment.end:
+                                point.adjust_time(-adjustment_delta)
                 current_point_index = current_point_index + 1
 
     output_gpx_file = open(args.output, 'w')
