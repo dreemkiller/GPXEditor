@@ -95,18 +95,20 @@ def main():
     arg_parser = create_arg_parser()
 
     args = arg_parser.parse_args()
-
-    if type(args.adjustment_start) != type(args.adjustment_end) or len(args.adjustment_start) != len(args.adjustment_end):
-        print("Each 'adjustment-start' argument must be paired with an 'adjustment-end' argument")
-        arg_parser.print_help()
-        exit(1)
+    adjustments = []
+    if args.adjustment_start is not None:
+        if type(args.adjustment_start) != type(args.adjustment_end) or len(args.adjustment_start) != len(args.adjustment_end):
+            print("Each 'adjustment-start' argument must be paired with an 'adjustment-end' argument")
+            arg_parser.print_help()
+            exit(1)
     
-    adjustments = sort_adjustments(args.adjustment_start, args.adjustment_end)
+        adjustments = sort_adjustments(args.adjustment_start, args.adjustment_end)
+    
 
-    if not are_adjustments_consistent(adjustments):
-        print('Provided adjustment regions are not consistent. Either an end is before a start, or the adjustment regions overlap')
-        arg_parser.print_help()
-        exit(1)
+        if not are_adjustments_consistent(adjustments):
+            print('Provided adjustment regions are not consistent. Either an end is before a start, or the adjustment regions overlap')
+            arg_parser.print_help()
+            exit(1)
 
     # Parsing an existing file:
     # -------------------------
@@ -117,12 +119,23 @@ def main():
 
     for track in gpx.tracks:
         one_second = datetime.timedelta(seconds=1)
+        found_remove_before_time = False
         for segment in track.segments:
             current_point_index = 0
             for point in segment.points:
                 if args.remove_before != None and point.time < args.remove_before:
                     segment.remove_point(0) # it's always zero, because we're removing from the beginning
                     current_point_index = current_point_index - 1 # now this number is negative, but will be incremented before being used again
+                elif args.remove_before != None and point.time > args.remove_before and not found_remove_before_time:
+                    # This is the first point that we've found with a time that's >= remove_before time - so remove_before occurred in a gap in the gpx timeline (probably because the rider was stopped).
+                    # We need to fill that gap with the data from this point
+                    found_remove_before_time = True
+                    point_copy = point
+                    point_copy.time = args.remove_before
+                    while(point_copy.time < point.time):
+                        segment.points.prepend(point_copy)
+                        point_copy.adjust_time(datetime.tiledelta(seconds=1))
+                    
                 else: # if an adjustment occurs before args.remove_point, we will (rightly) ignore it. But why would someone do that? Maybe I should write a bug just to punish them
                     if len(adjustments) > 0:
                         for this_adjustment in adjustments:
@@ -132,6 +145,7 @@ def main():
                                 segment.remove_point(current_point_index)
                                 current_point_index = current_point_index -1
                             if point.time >= this_adjustment.end:
+                                print("Adjusting time of point at time:", point.time)
                                 point.adjust_time(-adjustment_delta)
                 current_point_index = current_point_index + 1
 
